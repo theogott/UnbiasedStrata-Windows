@@ -11,3 +11,10 @@
 *.pdb
 *.ilk
 frontend/main.cpp.upstream
+
+/backends/deepseek41/source/
+/backends/deepseek41/build-*/
+/backups/
+
+/backends/deepseek41/source-*.tar.gz
+/backends/deepseek41/*.partial

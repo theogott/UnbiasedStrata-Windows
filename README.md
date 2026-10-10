@@ -109,3 +109,7 @@ Items 2 and 3 are made once with upstream Strata's tools and will be published; 
 MIT, as upstream. The engine is the work of Niko1221 and the Strata contributors; see [LICENSE](LICENSE)
 and [UPSTREAM.md](UPSTREAM.md). llama.cpp and ggml (MIT) are used as a pinned submodule. The model files
 have their own licences.
+
+## Experimental DeepSeek-V4.1-Flash backend (Windows)
+
+A separate pinned llama.cpp backend can be selected with `--backend deepseek41`. It uses DeepSeek's architecture and tokenizer; the existing Strata engine continues to handle Qwen. See [DeepSeek Windows instructions](windows/DEEPSEEK41-README.md) for build, model files, RAM guards and limitations. Native build and model-free tests are separate from real-model validation; GPU inference has not been tested on our computer. Models are not included or downloaded automatically.

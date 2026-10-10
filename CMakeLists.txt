@@ -1,4 +1,4 @@
-﻿# Strata Engine - top-level build (P1.S1).
+# Strata Engine - top-level build (P1.S1).
 #
 # Targets (phase-1 Ă‚Â§P1.S1): `strata_artifact` (no CUDA dependency), `tests`.  `strata_plan` and the C++
 # `strata-pack` are added when their sources exist - a target with no sources would make the build graph
@@ -1284,4 +1284,12 @@ if(WIN32 AND STRATA_WINDOWS_TESTS)
   target_link_libraries(windows-http-test PRIVATE cpp-httplib)
   add_test(NAME windows-http COMMAND windows-http-test)
   set_tests_properties(windows-http PROPERTIES TIMEOUT 30)
+endif()
+
+if(WIN32 AND STRATA_WINDOWS_TESTS)
+  add_executable(windows-deepseek-test frontend/deepseek_test.cpp)
+  target_include_directories(windows-deepseek-test PRIVATE ${STRATA_GGML_DIR}/vendor)
+  target_link_libraries(windows-deepseek-test PRIVATE cpp-httplib)
+  add_test(NAME windows-deepseek COMMAND windows-deepseek-test)
+  set_tests_properties(windows-deepseek PROPERTIES TIMEOUT 30)
 endif()
