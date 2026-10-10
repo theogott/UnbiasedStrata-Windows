@@ -1,0 +1,115 @@
+--- a/src/llama-arch.h
++++ b/src/llama-arch.h
+@@ -449,6 +449,7 @@
+     LLM_TENSOR_FFN_GATE_CHEXPS,
+     LLM_TENSOR_FFN_UP_CHEXPS,
+     LLM_TENSOR_FFN_EXP_PROBS_B,
++    LLM_TENSOR_FFN_EXP_PROBS_B_VL,
+     LLM_TENSOR_FFN_LATENT_DOWN,
+     LLM_TENSOR_FFN_LATENT_UP,
+     LLM_TENSOR_ATTN_Q_NORM,
+--- a/src/llama-arch.cpp
++++ b/src/llama-arch.cpp
+@@ -428,6 +428,7 @@
+     { LLM_TENSOR_FFN_UP_SHEXP,                           "blk.%d.ffn_up_shexp" },
+     { LLM_TENSOR_FFN_DOWN_SHEXP,                         "blk.%d.ffn_down_shexp" },
+     { LLM_TENSOR_FFN_EXP_PROBS_B,                        "blk.%d.exp_probs_b" },
++    { LLM_TENSOR_FFN_EXP_PROBS_B_VL,                     "blk.%d.exp_probs_b_vl" },
+     { LLM_TENSOR_FFN_LATENT_DOWN,                        "blk.%d.ffn_latent_down" },
+     { LLM_TENSOR_FFN_LATENT_UP,                          "blk.%d.ffn_latent_up" },
+     { LLM_TENSOR_ATTN_NORM_2,                            "blk.%d.attn_norm_2" },
+@@ -821,6 +822,7 @@
+     {LLM_TENSOR_FFN_GATE_CHEXPS,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT_ID}},
+     {LLM_TENSOR_FFN_UP_CHEXPS,              {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT_ID}},
+     {LLM_TENSOR_FFN_EXP_PROBS_B,            {LLM_TENSOR_LAYER_REPEATING, GGML_OP_ADD}},
++    {LLM_TENSOR_FFN_EXP_PROBS_B_VL,         {LLM_TENSOR_LAYER_REPEATING, GGML_OP_NONE}},
+     // altup / laurel (gemma 3n)
+     {LLM_TENSOR_PER_LAYER_TOKEN_EMBD,       {LLM_TENSOR_LAYER_INPUT,     GGML_OP_GET_ROWS}},
+     {LLM_TENSOR_PER_LAYER_MODEL_PROJ,       {LLM_TENSOR_LAYER_REPEATING, GGML_OP_MUL_MAT}},
+--- a/src/models/deepseek4.cpp
++++ b/src/models/deepseek4.cpp
+@@ -142,8 +142,14 @@
+         } else {
+             for (uint32_t il = 0; il < hparams.n_layer_all; ++il) {
+                 const uint32_t r = hparams.dsv4_compress_ratios[il];
+-                hparams.dsv4_is_kv_source[il]    = r != 0;
+-                hparams.dsv4_is_index_source[il] = r == 4;
++                if (hparams.dsv4_v41) {
++                    const std::string prefix = "blk." + std::to_string(il);
++                    hparams.dsv4_is_kv_source[il] = ml.get_weight((prefix + ".attn_compressor_kv.weight").c_str()) != nullptr;
++                    hparams.dsv4_is_index_source[il] = ml.get_weight((prefix + ".indexer.attn_q_b.weight").c_str()) != nullptr;
++                } else {
++                    hparams.dsv4_is_kv_source[il] = r != 0;
++                    hparams.dsv4_is_index_source[il] = r == 4;
++                }
+             }
+         }
+ 
+@@ -287,7 +293,10 @@
+             const int64_t n_rows      = hparams.engram_num_embd[e];
+ 
+             layer.engram_embd       = create_tensor(tn(LLM_TENSOR_ENGRAM_EMBED,       "weight", i), {head_dim, n_rows}, flags | TENSOR_HOST);
+-            layer.engram_embd_scale = create_tensor(tn(LLM_TENSOR_ENGRAM_EMBED_SCALE, "weight", i), {head_dim/32, n_rows}, flags | TENSOR_HOST);
++            layer.engram_embd_scale = create_tensor(tn(LLM_TENSOR_ENGRAM_EMBED_SCALE, "weight", i), {head_dim/32, n_rows}, flags | TENSOR_HOST | TENSOR_NOT_REQUIRED);
++            if (!layer.engram_embd_scale && layer.engram_embd->type != GGML_TYPE_F32 && !ggml_get_type_traits(layer.engram_embd->type)->to_float) {
++                throw std::runtime_error("DeepSeek-V4.1: unsupported Engram row type without scale tensor");
++            }
+             layer.engram_wkv        = create_tensor(tn(LLM_TENSOR_ENGRAM_WKV,         "weight", i), {n_hash_cols*head_dim, n_embd*(hc_mult + 1)}, flags);
+             layer.engram_q          = create_tensor(tn(LLM_TENSOR_ENGRAM_Q,           "weight", i), {n_embd, hc_mult}, flags);
+             layer.engram_k          = create_tensor(tn(LLM_TENSOR_ENGRAM_K,           "weight", i), {n_embd, hc_mult}, flags);
+@@ -306,6 +315,7 @@
+         } else {
+             layer.ffn_exp_probs_b = create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B, "bias", i), {n_expert}, flags);
+         }
++        create_tensor(tn(LLM_TENSOR_FFN_EXP_PROBS_B_VL, "bias", i), {n_expert}, flags | TENSOR_SKIP | TENSOR_NOT_REQUIRED);
+         layer.ffn_norm = create_tensor(tn(LLM_TENSOR_FFN_NORM, "weight", i), {n_embd}, flags);
+ 
+         layer.ffn_gate_exps = create_tensor(tn(LLM_TENSOR_FFN_GATE_EXPS, "weight", i), {n_embd,   n_ff_exp, n_expert}, flags);
+--- a/src/llama-graph.cpp
++++ b/src/llama-graph.cpp
+@@ -180,7 +180,8 @@
+         GGML_ASSERT(ggml_backend_buffer_is_host(layer.engram_embd->buffer));
+ 
+         const uint8_t * w  = (const uint8_t *) layer.engram_embd->data;
+-        const uint8_t * sc = (const uint8_t *) layer.engram_embd_scale->data;
++        const uint8_t * sc = layer.engram_embd_scale ? (const uint8_t *) layer.engram_embd_scale->data : nullptr;
++        const size_t row_bytes = sc ? t.head_dim : ggml_row_size(layer.engram_embd->type, t.head_dim);
+ 
+         // H4. Two passes on purpose. The first only hashes -- it touches no table memory, so it
+         // cannot fault -- and by the end of it every address this layer will read is known.
+@@ -206,10 +207,12 @@
+         enderecos.clear();
+         tamanhos.clear();
+         for (size_t k = 0; k < todas.size(); ++k) {
+-            enderecos.push_back((void *) (w  + (size_t) todas[k]*t.head_dim));
+-            tamanhos .push_back(t.head_dim);
+-            enderecos.push_back((void *) (sc + (size_t) todas[k]*(t.head_dim/32)));
+-            tamanhos .push_back(t.head_dim/32);
++            enderecos.push_back((void *) (w + (size_t) todas[k]*row_bytes));
++            tamanhos.push_back(row_bytes);
++            if (sc) {
++                enderecos.push_back((void *) (sc + (size_t) todas[k]*(t.head_dim/32)));
++                tamanhos.push_back(t.head_dim/32);
++            }
+         }
+         llama_prefetch_ranges(enderecos.data(), tamanhos.data(), enderecos.size());
+ 
+@@ -217,9 +220,15 @@
+             const int64_t * r = todas.data() + (size_t) i*t.n_hash_cols;
+             float * dst = buf.data() + (size_t) i*row;
+             for (uint32_t c = 0; c < t.n_hash_cols; ++c) {
+-                llama_engram_dequant_row(w  + (size_t) r[c]*t.head_dim,
+-                                         sc + (size_t) r[c]*(t.head_dim/32),
+-                                         t.head_dim, dst + (size_t) c*t.head_dim);
++                const uint8_t * input = w + (size_t) r[c]*row_bytes;
++                float * output = dst + (size_t) c*t.head_dim;
++                if (sc) {
++                    llama_engram_dequant_row(input, sc + (size_t) r[c]*(t.head_dim/32), t.head_dim, output);
++                } else if (layer.engram_embd->type == GGML_TYPE_F32) {
++                    memcpy(output, input, t.head_dim*sizeof(float));
++                } else {
++                    ggml_get_type_traits(layer.engram_embd->type)->to_float(input, output, t.head_dim);
++                }
+             }
+         }
+ 
