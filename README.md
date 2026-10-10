@@ -4,6 +4,8 @@ Windows fork of [UnbiasedStrata by Robert Karl / robertkarl](https://github.com/
 
 **Read [Windows instructions, changes and test limitations](windows/README.md). Real-model inference is untested on this Windows port.**
 
+**[Strata-Sicherheitsvergleich (Deutsch, 10.10.2026)](STRATA-SICHERHEITS-VERGLEICH.md)** — reviewed improvements, remaining concerns, Windows controls and validation limits.
+
 The original upstream README follows for provenance; its Linux instructions describe upstream support, not this Windows preview.
 
 ---
