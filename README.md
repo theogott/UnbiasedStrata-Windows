@@ -2,7 +2,7 @@
 
 Windows fork of [UnbiasedStrata by Robert Karl / robertkarl](https://github.com/robertkarl/UnbiasedStrata), based on the Strata engine by Niko1221 and contributors.
 
-**Read [Windows instructions, changes and test limitations](windows/README.md). Real-model inference is untested on this Windows port.**
+**Read [Windows instructions, changes and test limitations](windows/README.md). DeepSeek Q3 short-prompt inference passed at 262144 context; the fork's Qwen engine remains untested.**
 
 **[Strata-Sicherheitsvergleich (Deutsch, 10.10.2026)](STRATA-SICHERHEITS-VERGLEICH.md)** — reviewed improvements, remaining concerns, Windows controls and validation limits.
 
@@ -114,4 +114,4 @@ have their own licences.
 
 ## Experimental DeepSeek-V4.1-Flash backend (Windows)
 
-A separate pinned llama.cpp backend can be selected with `--backend deepseek41`. It uses DeepSeek's architecture and tokenizer; the existing Strata engine continues to handle Qwen. See [DeepSeek Windows instructions](windows/DEEPSEEK41-README.md) for build, model files, RAM guards and limitations. Native build and model-free tests are separate from real-model validation; GPU inference has not been tested on our computer. Models are not included or downloaded automatically.
+A separate pinned llama.cpp backend can be selected with `--backend deepseek41`. It uses DeepSeek's architecture and tokenizer; the existing Strata engine continues to handle Qwen. See [DeepSeek Windows instructions](windows/DEEPSEEK41-README.md) for build, model files, RAM guards and limitations. Native build and model-free tests are separate from real-model validation; DeepSeek Q3_K_M short-prompt inference now passes on our RTX 5090 at an active 262144-token context; see the measured results and compatible-model preparation steps below. Full-context quality remains untested. Models are not included or downloaded automatically.
