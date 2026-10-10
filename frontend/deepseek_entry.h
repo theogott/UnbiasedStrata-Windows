@@ -13,7 +13,7 @@ inline void usage() {
         "  unbiased-strata --backend deepseek41 --model C:\\models\\MODEL-00001-of-00011.gguf --api-key-file C:\\private\\key.txt [options]\n"
         "  --backend-exe PATH   absolute path to our hardened unbiased-deepseek-server.exe\n"
         "  --port N             API port (default 8080, loopback only)\n"
-        "  --ctx N              context 1024..8192 (default 4096)\n"
+        "  --ctx N              context 1024..262144 (default 4096)\n"
         "  --threads N          CPU workers 1..64 (default 4)\n"
         "  --expert-vram-gib N   streaming VRAM cache 1..22 (default 18)\n"
         "  --expert-ram-gib N    pinned RAM cache 0..72 (default 64)\n"
@@ -27,7 +27,7 @@ inline int run(int argc,char** argv) {
         for(int i=1;i<argc;++i) { const std::string name(argv[i]);auto next=[&](){if(i+1>=argc)throw std::runtime_error(name+" needs a value");return std::string(argv[++i]);};
             if(name=="--backend") { if(next()!="deepseek41")throw std::runtime_error("unknown backend"); }
             else if(name=="--model")model=next();else if(name=="--api-key-file")keyfile=next();else if(name=="--backend-exe")backend=next();
-            else if(name=="--port")port=bounded(next(),1,65535);else if(name=="--ctx")ctx=bounded(next(),1024,8192);else if(name=="--threads")threads=bounded(next(),1,64);
+            else if(name=="--port")port=bounded(next(),1,65535);else if(name=="--ctx")ctx=bounded(next(),1024,262144);else if(name=="--threads")threads=bounded(next(),1,64);
             else if(name=="--expert-vram-gib")vram=bounded(next(),1,22);else if(name=="--expert-ram-gib")ram=bounded(next(),0,72);else if(name=="--io-threads")io=bounded(next(),1,16);
             else if(name=="--host") { if(next()!="127.0.0.1")throw std::runtime_error("DeepSeek binds only to 127.0.0.1"); }
             else if(name=="--check-only")check=true;else if(name=="--help" || name=="-h"){usage();return 0;}else throw std::runtime_error("unsupported DeepSeek option: "+name);
