@@ -1,3 +1,13 @@
+# UnbiasedStrata Windows (experimental)
+
+Windows fork of [UnbiasedStrata by Robert Karl / robertkarl](https://github.com/robertkarl/UnbiasedStrata), based on the Strata engine by Niko1221 and contributors.
+
+**Read [Windows instructions, changes and test limitations](windows/README.md). Real-model inference is untested on this Windows port.**
+
+The original upstream README follows for provenance; its Linux instructions describe upstream support, not this Windows preview.
+
+---
+
 # UnbiasedStrata
 
 A cut-down fork of [Strata](https://github.com/Niko1221/Strata), an inference engine for the

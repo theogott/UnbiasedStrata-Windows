@@ -1,2 +1,13 @@
 /build*/
 *.log
+
+/bin/
+/dist/
+/private/
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+frontend/main.cpp.upstream

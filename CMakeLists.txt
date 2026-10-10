@@ -207,6 +207,11 @@ if(STRATA_WERROR)
     $<$<COMPILE_LANGUAGE:HIP>:-Werror>)
 endif()
 
+# Windows sandbox shells may omit PROCESSOR_ARCHITECTURE; the compiler still identifies x64.
+if(WIN32 AND NOT CMAKE_SYSTEM_PROCESSOR AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "x64")
+  set(CMAKE_SYSTEM_PROCESSOR AMD64)
+endif()
+
 # ---- strata_artifact -------------------------------------------------------
 # Header-only, and that is a deliberate property rather than an unfinished split: the GGUF reader and the
 # scalar dequantizers hold no state worth hiding, and a header-only boundary cannot introduce a
@@ -1256,10 +1261,27 @@ if(STRATA_ENABLE_CUDA AND STRATA_NATIVE_EXPERTS)
              LLAMA_BUILD_UI LLAMA_USE_PREBUILT_UI LLAMA_OPENSSL LLAMA_LLGUIDANCE LLAMA_ALL_WARNINGS)
     set(${_o} OFF CACHE BOOL "" FORCE)
   endforeach()
+  # llama.cpp requires C++17; inheriting C++20 changes its u8 literals to char8_t.
+  set(CMAKE_CXX_STANDARD 17)
   add_subdirectory(${STRATA_GGML_DIR} ${CMAKE_BINARY_DIR}/llama.cpp EXCLUDE_FROM_ALL)
+  set(CMAKE_CXX_STANDARD 20)
   find_package(Threads REQUIRED)
   add_executable(unbiased-strata frontend/main.cpp frontend/engine_entry.cpp)
   target_include_directories(unbiased-strata PRIVATE ${_strata_gpu_include_directories} ${STRATA_GGML_DIR}/vendor)
   target_link_libraries(unbiased-strata PRIVATE strata_engine strata_prefill strata_spec ${_strata_gpu_runtime_target}
                         llama-common llama cpp-httplib Threads::Threads)
+endif()
+
+# Model-free Windows port checks; never initialize a GPU or load weights.
+option(STRATA_WINDOWS_TESTS "Build Windows frontend process and HTTP tests" OFF)
+if(WIN32 AND STRATA_WINDOWS_TESTS)
+  enable_testing()
+  add_executable(windows-process-test frontend/windows_engine_pipe_test.cpp)
+  add_test(NAME windows-process COMMAND windows-process-test)
+  set_tests_properties(windows-process PROPERTIES TIMEOUT 30)
+  add_executable(windows-http-test frontend/http_access_test.cpp)
+  target_include_directories(windows-http-test PRIVATE ${STRATA_GGML_DIR}/vendor)
+  target_link_libraries(windows-http-test PRIVATE cpp-httplib)
+  add_test(NAME windows-http COMMAND windows-http-test)
+  set_tests_properties(windows-http PROPERTIES TIMEOUT 30)
 endif()
