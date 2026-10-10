@@ -2,7 +2,7 @@ param(
  [Parameter(Mandatory=$true)][string]$ModelFile,
  [Parameter(Mandatory=$true)][string]$ApiKeyFile,
  [ValidateRange(1,65535)][int]$Port=8080,
- [ValidateRange(1024,8192)][int]$Context=4096,
+ [ValidateRange(1024,262144)][int]$Context=4096,
  [ValidateRange(1,64)][int]$Threads=4,
  [ValidateRange(1,22)][int]$ExpertVramGiB=18,
  [ValidateRange(0,72)][int]$ExpertRamGiB=64,

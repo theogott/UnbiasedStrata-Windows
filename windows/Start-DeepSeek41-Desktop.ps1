@@ -14,8 +14,8 @@ if ($VerifyOnly) {
 try {
  Write-Host 'UnbiasedStrata Windows - DeepSeek V4.1 Flash (experimental)' -ForegroundColor Cyan
  Write-Host 'Select the first shard of your downloaded DeepSeek-V4.1-Flash GGUF model.'
- Write-Host 'Model weights are not included. Real inference has not yet been verified.'
- Write-Host 'The default cache requires at least 96 GiB of free RAM; free GPU memory is also needed.'
+ Write-Host 'Select the compatible Q3 first shard prepared with windows/Adapt-DeepSeek-Q3.py. Original weights are not included.'
+ Write-Host 'This launcher requests 262144 context and needs at least 48 GiB free RAM plus sufficient free GPU memory.'
  Add-Type -AssemblyName System.Windows.Forms
  $dialog=New-Object System.Windows.Forms.OpenFileDialog
  $dialog.Title='Select DeepSeek V4.1 Flash: first GGUF shard (00001)'
@@ -45,7 +45,7 @@ try {
  }
  Write-Host "Local API: http://127.0.0.1:8080/v1; key file: $keyFile"
  Write-Host 'Ctrl+C stops the server. Keep this window open while it runs.'
- & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $starter -ModelFile $model -ApiKeyFile $keyFile
+ & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File $starter -ModelFile $model -ApiKeyFile $keyFile -Context 262144 -ExpertVramGiB 18 -ExpertRamGiB 16
  if ($LASTEXITCODE -ne 0) { throw "Server exited with code $LASTEXITCODE. See the message above." }
 } catch {
  Write-Host $_.Exception.Message -ForegroundColor Red

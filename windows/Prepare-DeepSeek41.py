@@ -17,7 +17,7 @@ source=backend/'source'
 with tarfile.open(archive) as tar:
     prefix='llama.cpp-'+sha+'/'
     originals={}
-    for name in ['CMakeLists.txt','common/arg.cpp','tools/server/server-http.cpp','tools/server/main.cpp']:
+    for name in ['CMakeLists.txt', 'common/arg.cpp', 'tools/server/server-http.cpp', 'tools/server/main.cpp', 'src/llama-arch.h', 'src/llama-arch.cpp', 'src/models/deepseek4.cpp', 'src/llama-graph.cpp']:
         originals[name]=tar.extractfile(prefix+name).read().decode('utf-8-sig').replace('\r\n','\n')
     if not source.exists():
         source.mkdir()
@@ -29,7 +29,7 @@ with tarfile.open(archive) as tar:
             member.name=relative
             tar.extract(member,source,filter='data')
 
-lines=(backend/'windows-hardening.patch').read_text(encoding='utf-8').splitlines(True)
+lines=((backend/'windows-hardening.patch').read_text(encoding='utf-8')+(backend/'q3-compatibility.patch').read_text(encoding='utf-8')).splitlines(True)
 i=0
 while i<len(lines):
     if not lines[i].startswith('--- a/'): raise RuntimeError('Unexpected patch format')
