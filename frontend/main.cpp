@@ -33,6 +33,7 @@
 #include <sys/stat.h>
 #ifdef _WIN32
 #include "windows_engine_pipe.h"
+#include "deepseek_entry.h"
 #else
 #include <sys/wait.h>
 #include <unistd.h>
@@ -59,6 +60,7 @@ struct Options {
 
 void usage() {
     std::fprintf(stderr,
+        "Windows DeepSeek mode: --backend deepseek41 --help\n\n"
         "usage: unbiased-strata --model SHARD1.gguf --pack DIR --mtp DIR [options] [-- engine options]\n\n"
         "  --model PATH    the model's first GGUF shard (...-00001-of-00002.gguf); the second must be beside it\n"
         "  --pack DIR      the prepared pack for that model\n"
@@ -585,6 +587,12 @@ bool parse_args(int argc, char** argv, Options& o) {
 }  // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--") == 0 || std::strcmp(argv[i], "--engine") == 0) break;
+        if (std::strcmp(argv[i], "--backend") == 0) return deepseek_entry::run(argc, argv);
+    }
+#endif
     if (argc == 2 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) { usage(); return 0; }
     if (argc > 1 && std::strcmp(argv[1], "--engine") == 0) {
 #ifdef _WIN32

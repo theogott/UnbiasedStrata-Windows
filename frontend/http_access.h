@@ -29,12 +29,7 @@ inline bool authorized(const std::string& header, const std::string& key) {
     for (size_t i = 0; i < expected.size(); ++i) difference = difference | (unsigned char)(header[i] ^ expected[i]);
     return difference == 0;
 }
-inline void configure(httplib::Server& http, int port, const std::string& key) {
-    http.new_task_queue = [] { return new httplib::ThreadPool(4, 4, 32); };
-    http.set_read_timeout(10, 0);
-    http.set_keep_alive_timeout(5);
-    http.set_payload_max_length(1024 * 1024); // text API only; no image uploads
-    http.set_pre_routing_handler([port, key](const httplib::Request& request, httplib::Response& response) {
+inline bool access_allowed(const httplib::Request& request, httplib::Response& response, int port, const std::string& key) {
         int status = 0;
         const char* message = nullptr;
         if (request.get_header_value_count("Host") != 1 ||
@@ -48,11 +43,19 @@ inline void configure(httplib::Server& http, int port, const std::string& key) {
             status = 401; message = "valid Bearer API key required";
             response.set_header("WWW-Authenticate", "Bearer");
         }
-        if (!status) return httplib::Server::HandlerResponse::Unhandled;
+        if (!status) return true;
         response.status = status;
         response.set_header("Cache-Control", "no-store");
         response.set_content(std::string("{\"error\":{\"message\":\"") + message + "\"}}", "application/json");
-        return httplib::Server::HandlerResponse::Handled;
+        return false;
+}
+inline void configure(httplib::Server& http, int port, const std::string& key) {
+    http.new_task_queue = [] { return new httplib::ThreadPool(4, 4, 32); };
+    http.set_read_timeout(10, 0);
+    http.set_keep_alive_timeout(5);
+    http.set_payload_max_length(1024 * 1024);
+    http.set_pre_routing_handler([port, key](const httplib::Request& request, httplib::Response& response) {
+        return access_allowed(request, response, port, key) ? httplib::Server::HandlerResponse::Unhandled : httplib::Server::HandlerResponse::Handled;
     });
 }
 } // namespace windows_local_http
