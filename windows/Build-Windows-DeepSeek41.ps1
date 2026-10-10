@@ -24,4 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw 'DeepSeek model-free tests failed.' }
 $bin=Join-Path $root 'bin'; New-Item -ItemType Directory -Path $bin -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $BuildDirectory 'bin\llama-server.exe') -Destination (Join-Path $bin 'unbiased-deepseek-server.exe')
 foreach ($name in @('cudart64_13.dll','cublas64_13.dll','cublasLt64_13.dll')) { Copy-Item -LiteralPath (Join-Path $CudaToolkitPath "bin\x64\$name") -Destination (Join-Path $bin $name) }
+$openmp=Join-Path $env:VCToolsRedistDir 'x64\Microsoft.VC143.OpenMP\vcomp140.dll'
+if (-not (Test-Path -LiteralPath $openmp -PathType Leaf)) { throw 'Missing Visual Studio 2022 x64 OpenMP redistributable.' }
+Copy-Item -LiteralPath $openmp -Destination (Join-Path $bin 'vcomp140.dll')
 Write-Host "Built DeepSeek-V4.1 Windows backend from $($pin.commit). GPU/model inference remains untested."
