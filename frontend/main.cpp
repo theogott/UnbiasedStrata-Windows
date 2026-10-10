@@ -13,6 +13,9 @@
 #include "llama.h"
 
 #include <cpp-httplib/httplib.h>
+#include "http_access.h"
+#include "local_key.h"
+#include "engine_tuning.h"
 
 #include <atomic>
 #include <chrono>
@@ -28,18 +31,24 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include "windows_engine_pipe.h"
+#else
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 int strata_engine_main(int argc, char** argv);
 
 namespace {
 
-const char* const kModelName = "qwen3.8-flash-next-iq3_xxs";
+const char* kModelName = "qwen3.8-flash-next-iq3_xxs";
 
 struct Options {
     std::string model;                  // shard 1 of the GGUF
     std::string pack;                   // the prepared pack directory
+    std::string api_key_file;
+    std::string api_key;
     std::string mtp;                    // the prepared draft-head directory
     std::string host = "127.0.0.1";
     int port = 8080;
@@ -57,6 +66,7 @@ void usage() {
         "  --ctx N         context length in tokens (default 32768)\n"
         "  --threads N     CPU threads for the experts the GPU does not hold (default: every physical core;\n"
         "                  set it inside a container, where the host's core count is not yours)\n"
+        "  --api-key-file PATH   required local file containing the Bearer API key\n"
         "  --host ADDR     address to listen on (default 127.0.0.1)\n"
         "  --port N        port to listen on (default 8080)\n\n"
         "Serves POST /v1/chat/completions (OpenAI style, with streaming), GET /v1/models and GET /health.\n");
@@ -80,6 +90,9 @@ struct GenResult {
 class Engine {
 public:
     bool start(const std::vector<std::string>& args, std::string& err) {
+#ifdef _WIN32
+        return pipe_.start(args, err);
+#else
         int to_child[2], from_child[2];
         if (::pipe(to_child) != 0 || ::pipe(from_child) != 0) { err = "pipe failed"; return false; }
         pid_ = ::fork();
@@ -100,6 +113,7 @@ public:
         in_fd_ = to_child[1];
         out_ = ::fdopen(from_child[0], "r");
         return out_ != nullptr;
+#endif
     }
 
     /// Reads the engine's start-up lines until it says READY.  Loading the model takes minutes.
@@ -153,6 +167,9 @@ public:
     }
 
     void quit() {
+#ifdef _WIN32
+        pipe_.quit();
+#else
         if (pid_ > 0) {
             send("QUIT\n");
             int status = 0;
@@ -161,6 +178,8 @@ public:
             ::waitpid(pid_, &status, 0);
             pid_ = -1;
         }
+#endif
+        alive_ = false;
     }
 
     bool alive() const { return alive_; }
@@ -168,6 +187,10 @@ public:
 
 private:
     bool send(const std::string& s) {
+#ifdef _WIN32
+        if (!pipe_.send(s)) { alive_ = false; return false; }
+        return true;
+#else
         size_t off = 0;
         while (off < s.size()) {
             const ssize_t n = ::write(in_fd_, s.data() + off, s.size() - off);
@@ -175,9 +198,14 @@ private:
             off += (size_t) n;
         }
         return true;
+#endif
     }
 
     bool read_line(std::string& line) {
+#ifdef _WIN32
+        if (!pipe_.read_line(line)) { alive_ = false; return false; }
+        return true;
+#else
         char* buf = nullptr;
         size_t cap = 0;
         const ssize_t n = ::getline(&buf, &cap, out_);
@@ -186,11 +214,16 @@ private:
         std::free(buf);
         while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
         return true;
+#endif
     }
 
+#ifdef _WIN32
+    WindowsEnginePipe pipe_;
+#else
     pid_t pid_ = -1;
     int in_fd_ = -1;
     FILE* out_ = nullptr;
+#endif
     std::atomic<bool> alive_{true};
 };
 
@@ -525,6 +558,7 @@ bool parse_args(int argc, char** argv, Options& o) {
         };
         if (a == "--model") o.model = next("--model");
         else if (a == "--pack") o.pack = next("--pack");
+        else if (a == "--api-key-file") o.api_key_file = next("--api-key-file");
         else if (a == "--mtp") o.mtp = next("--mtp");
         else if (a == "--host") o.host = next("--host");
         else if (a == "--port") o.port = std::atoi(next("--port").c_str());
@@ -533,14 +567,13 @@ bool parse_args(int argc, char** argv, Options& o) {
         else if (a == "--") {
             for (++i; i < argc; ++i) {
                 const std::string e = argv[i];
-                // one GPU only: the engine's multi-GPU and remote-expert modes are not part of this fork
-                for (const char* no : {"--gpus", "--layer-split", "--split-device", "--peer-device", "--peer-slots",
-                                       "--remote-expert", "--vision", "--batch"})
-                    if (e.rfind(no, 0) == 0) {
-                        std::fprintf(stderr, "unbiased-strata: %s is not supported (single GPU, text only)\n", e.c_str());
-                        std::exit(2);
-                    }
+                if (tuning_flag(e)) { o.extra.push_back(e); continue; }
+                if (i + 1 >= argc || !tuning_value(e, argv[i + 1])) {
+                    std::fprintf(stderr, "unbiased-strata: unsupported tuning option or value: %s\n", e.c_str());
+                    std::exit(2);
+                }
                 o.extra.push_back(e);
+                o.extra.push_back(argv[++i]);
             }
         }
         else if (a == "-h" || a == "--help") return false;
@@ -552,12 +585,26 @@ bool parse_args(int argc, char** argv, Options& o) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (argc > 1 && std::strcmp(argv[1], "--engine") == 0) return strata_engine_main(argc - 1, argv + 1);
+    if (argc == 2 && (std::strcmp(argv[1], "--help") == 0 || std::strcmp(argv[1], "-h") == 0)) { usage(); return 0; }
+    if (argc > 1 && std::strcmp(argv[1], "--engine") == 0) {
+#ifdef _WIN32
+        _setmode(_fileno(stdin), _O_BINARY);
+        _setmode(_fileno(stdout), _O_BINARY);
+#endif
+        return strata_engine_main(argc - 1, argv + 1);
+    }
 
     Server srv;
     Options& o = srv.opt;
     if (!parse_args(argc, argv, o)) { usage(); return 2; }
 
+    if (o.model.find("-IQ3_S-") != std::string::npos) kModelName = "qwen3.8-flash-next-iq3_s";
+    if (!windows_local_http::loopback_bind(o.host) || o.port < 1 || o.port > 65535) {
+        std::fprintf(stderr, "unbiased-strata: only loopback hosts and valid ports are allowed\n"); return 2;
+    }
+    if (!read_local_api_key(o.api_key_file, o.api_key)) {
+        std::fprintf(stderr, "unbiased-strata: --api-key-file must be a regular local file with a 32-512 character key\n"); return 2;
+    }
     // every file the engine needs must already be here: nothing is fetched
     std::string shard2 = o.model;
     const size_t at = shard2.rfind("-00001-of-00002");
@@ -572,15 +619,22 @@ int main(int argc, char** argv) {
         if (!file_exists(f)) { std::fprintf(stderr, "unbiased-strata: missing file: %s\n", f.c_str()); return 2; }
     if (o.ctx < 1024) { std::fprintf(stderr, "unbiased-strata: --ctx must be at least 1024\n"); return 2; }
 
+#ifdef _WIN32
+    const char* ple_io = "mmap"; // upstream rejects locked PLE RAM on Windows
+#else
+    const char* ple_io = "ram";
+#endif
     // the engine, started first: loading takes minutes, and it must be forked before any thread exists
     std::vector<std::string> eargs = {
         "unbiased-strata", "--engine", "--serve", "--pack", o.pack, "--native", o.model, "--ple-gguf", shard2,
         "--expert-profile", profile, "--expert-cache", "auto", "--prefill", "auto", "--spec", "4", "--spec-min-p", "0.5",
-        "--mtp", o.mtp, "--max-context", std::to_string(o.ctx), "--ple-io", "ram"};
+        "--mtp", o.mtp, "--max-context", std::to_string(o.ctx), "--ple-io", ple_io};
     if (o.ctx > 8192) { eargs.push_back("--kv"); eargs.push_back("int8"); }
     if (o.threads > 0) { eargs.push_back("--pool-workers"); eargs.push_back(std::to_string(o.threads)); }
     for (const std::string& e : o.extra) eargs.push_back(e);
+#ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);
+#endif
     std::string err;
     if (!srv.engine.start(eargs, err)) { std::fprintf(stderr, "unbiased-strata: %s\n", err.c_str()); return 1; }
 
@@ -606,6 +660,7 @@ int main(int argc, char** argv) {
     }
 
     httplib::Server http;
+    windows_local_http::configure(http, o.port, o.api_key);
     g_server = &srv;
     g_http = &http;
     http.Get("/health", [&](const httplib::Request&, httplib::Response& res) {
@@ -627,7 +682,7 @@ int main(int argc, char** argv) {
     http.Post("/v1/chat/completions", [&](const httplib::Request& req, httplib::Response& res) {
         srv.handle_chat(req, res);
     });
-    http.set_read_timeout(600, 0);
+    // Request read timeout and bounded queue are set by the access policy.
     http.set_write_timeout(600, 0);
     std::signal(SIGINT, on_signal);
     std::signal(SIGTERM, on_signal);
