@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/JigSawPT/llama.cpp",
+  "branch": "dsv41-porte",
+  "commit": "8ce0968539b1a6795f3413c2783dfa5646b4688a",
+  "archive_sha256": "7eb842a9d3164d19a015794aadb13e91165ba607222e461e48a957033095dcae",
+  "model_architecture": "deepseek41",
+  "model_inference_tested": false
+}

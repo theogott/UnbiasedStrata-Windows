@@ -1,0 +1,112 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,6 +1,9 @@
+ cmake_minimum_required(VERSION 3.14...3.28) # for add_link_options and implicit target directories.
+ project("llama.cpp" C CXX)
+ include(CheckIncludeFileCXX)
++if(WIN32 AND NOT CMAKE_SYSTEM_PROCESSOR AND CMAKE_CXX_COMPILER_ARCHITECTURE_ID STREQUAL "x64")
++  set(CMAKE_SYSTEM_PROCESSOR AMD64)
++endif()
+ 
+ #set(CMAKE_WARN_DEPRECATED YES)
+ set(CMAKE_WARN_UNUSED_CLI YES)
+@@ -225,6 +228,8 @@
+ 
+ if (LLAMA_BUILD_COMMON AND LLAMA_BUILD_TOOLS)
+     add_subdirectory(tools)
++    target_include_directories(llama-server-impl PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unbiased-windows")
++    target_include_directories(llama-common PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unbiased-windows")
+ endif()
+ 
+ if (LLAMA_BUILD_APP)
+@@ -289,3 +294,8 @@
+ 
+ install(FILES "${CMAKE_CURRENT_BINARY_DIR}/llama.pc"
+         DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
++
++add_executable(unbiased-backend-test unbiased-windows/deepseek_test.cpp)
++target_include_directories(unbiased-backend-test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/unbiased-windows" "${CMAKE_CURRENT_SOURCE_DIR}/vendor")
++target_link_libraries(unbiased-backend-test PRIVATE cpp-httplib)
++target_compile_features(unbiased-backend-test PRIVATE cxx_std_17)
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -1,3 +1,4 @@
++#include "local_key.h"
+ #include "arg.h"
+ 
+ #include "build-info.h"
+@@ -3465,17 +3466,9 @@
+         {"--api-key-file"}, "FNAME",
+         "path to file containing API keys, one per line; lines starting with a hash are treated as comments (default: none)",
+         [](common_params & params, const std::string & value) {
+-            std::ifstream key_file(value);
+-            if (!key_file) {
+-                throw std::runtime_error(string_format("error: failed to open file '%s'\n", value.c_str()));
+-            }
+             std::string key;
+-            while (std::getline(key_file, key)) {
+-                if (!key.empty() && key[0] != '#') {
+-                    params.api_keys.push_back(key);
+-                }
+-            }
+-            key_file.close();
++            if (!read_local_api_key(value, key)) throw std::runtime_error("regular local 32..512 character API-key file required");
++            params.api_keys.push_back(key);
+         }
+     ).set_examples({LLAMA_EXAMPLE_SERVER}).set_env("LLAMA_ARG_API_KEY_FILE"));
+     add_opt(common_arg(
+--- a/tools/server/server-http.cpp
++++ b/tools/server/server-http.cpp
+@@ -1,4 +1,5 @@
+ #include "common.h"
++#include "deepseek_http.h"
+ #include "http.h"
+ #include "server-http.h"
+ #include "server-common.h"
+@@ -175,7 +176,7 @@
+     if (params.api_keys.size() == 1) {
+         const auto key = params.api_keys[0];
+         const std::string substr = key.substr(std::max(static_cast<int>(key.length() - 4), 0));
+-        SRV_TRC("api_keys: ****%s\n", substr.c_str());
++        SRV_TRC("%s", "api_keys: configured\n");
+     } else if (params.api_keys.size() > 1) {
+         SRV_TRC("api_keys: %zu keys loaded\n", params.api_keys.size());
+     }
+@@ -321,6 +322,15 @@
+         const auto max_threads = static_cast<size_t>(n_threads_http + 1024);
+         return new httplib::ThreadPool(n_threads_http, max_threads);
+     };
++
++    // UnbiasedStrata Windows: local text API only, same policy as the Qwen frontend.
++    if (gcp.enabled || !windows_local_http::loopback_bind(hostname) || port < 1 || port > 65535 ||
++        params.api_keys.size() != 1 || params.api_keys[0].size() < 32 || params.api_keys[0].size() > 512 ||
++        !path_prefix.empty() || params.ui || !params.public_path.empty()) {
++        SRV_ERR("%s", "UnbiasedStrata requires one API key, loopback, no UI and no API prefix\n");
++        return false;
++    }
++    deepseek_http::configure(*srv, port, params.api_keys[0], middleware_server_state);
+ 
+     //
+     // Web UI setup
+@@ -597,6 +607,7 @@
+ void server_http_context::post(const std::string & path, const server_http_context::handler_t & handler) const {
+     handlers.emplace(path, handler);
+     pimpl->srv->Post(path_prefix + path, [handler](const httplib::Request & req, httplib::Response & res) {
++        if (!deepseek_http::body_allowed(req, res)) return;
+         std::string body = req.body;
+         std::map<std::string, uploaded_file> files;
+ 
+--- a/tools/server/main.cpp
++++ b/tools/server/main.cpp
+@@ -1,5 +1,11 @@
++#include <cstdio>
++#include <cstring>
+ int llama_server(int argc, char ** argv);
+ 
+ int main(int argc, char ** argv) {
++    if (argc == 2 && std::strcmp(argv[1], "--unbiased-policy-check") == 0) {
++        std::fputs("UnbiasedStrata Windows local text HTTP policy v1\n", stderr);
++        return 41;
++    }
+     return llama_server(argc, argv);
+ }
