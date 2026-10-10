@@ -16,7 +16,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $source 'third_party\llama.cpp\ggml\
 $env:PATH=(Join-Path $CudaToolkitPath 'bin')+';'+$env:PATH
 & cmake -S $source -B $BuildDirectory -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_CUDA_COMPILER=$nvcc" -DSTRATA_ENABLE_CUDA=ON -DSTRATA_NATIVE_EXPERTS=ON -DSTRATA_PORTABLE=ON -DSTRATA_BUILD_TESTS=OFF -DCMAKE_CUDA_ARCHITECTURES=120 -DBUILD_SHARED_LIBS=OFF -DSTRATA_WINDOWS_TESTS=ON
 if ($LASTEXITCODE -ne 0) { throw 'CMake configure failed.' }
-& cmake --build $BuildDirectory -j $Jobs --target unbiased-strata windows-process-test windows-http-test
+& cmake --build $BuildDirectory -j $Jobs --target unbiased-strata windows-process-test windows-http-test windows-deepseek-test
 if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
 & ctest --test-dir $BuildDirectory -R windows- --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw 'Model-free Windows tests failed.' }

@@ -75,3 +75,7 @@ Source dependencies are pinned; the build itself makes no downloads. The preview
 - This fork: local Windows process port, launch helpers and HTTP access controls.
 
 Automated coding assistance was used for this Windows port. Treat it as an experimental preview pending independent review and real inference validation.
+
+## Experimental DeepSeek-V4.1-Flash backend (Windows)
+
+A separate pinned llama.cpp backend can be selected with `--backend deepseek41`. It uses DeepSeek's architecture and tokenizer; the existing Strata engine continues to handle Qwen. See [DeepSeek Windows instructions](DEEPSEEK41-README.md) for build, model files, RAM guards and limitations. Native build and model-free tests are separate from real-model validation; GPU inference has not been tested on our computer. Models are not included or downloaded automatically.
