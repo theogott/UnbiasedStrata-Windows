@@ -1,0 +1,98 @@
+{
+  "health": {
+    "status": "ok"
+  },
+  "contextRequested": 262144,
+  "shortPromptOnly": true,
+  "fullContextRetrievalTested": false,
+  "requests": [
+    {
+      "label": "fresh",
+      "wallSeconds": 14.108358900004532,
+      "timeToFirstTokenSeconds": 9.7643900999974,
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 17,
+        "total_tokens": 25,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 17,
+        "prompt_ms": 9757.273,
+        "prompt_per_token_ms": 573.9572352941176,
+        "prompt_per_second": 1.74229008453489,
+        "predicted_n": 8,
+        "predicted_ms": 4343.563,
+        "predicted_per_token_ms": 542.945375,
+        "predicted_per_second": 1.8418059091119434
+      },
+      "answer": "The capital of France is Paris.",
+      "reasoning": ""
+    },
+    {
+      "label": "repeated",
+      "wallSeconds": 2.6488575999974273,
+      "timeToFirstTokenSeconds": 1.1274220000050263,
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 17,
+        "total_tokens": 25,
+        "prompt_tokens_details": {
+          "cached_tokens": 13
+        }
+      },
+      "timings": {
+        "cache_n": 13,
+        "prompt_n": 4,
+        "prompt_ms": 1122.058,
+        "prompt_per_token_ms": 280.5145,
+        "prompt_per_second": 3.5648781079052956,
+        "predicted_n": 8,
+        "predicted_ms": 1520.926,
+        "predicted_per_token_ms": 190.11575,
+        "predicted_per_second": 5.259953475711508
+      },
+      "answer": "The capital of France is Paris.",
+      "reasoning": ""
+    },
+    {
+      "wallSeconds": 23.5262513,
+      "answer": "437",
+      "timings": {
+        "cache_n": 0,
+        "prompt_n": 22,
+        "prompt_ms": 22803.563,
+        "prompt_per_token_ms": 1036.5255909090909,
+        "prompt_per_second": 0.9647615155578978,
+        "predicted_n": 2,
+        "predicted_ms": 596.64,
+        "predicted_per_token_ms": 298.32,
+        "predicted_per_second": 3.3521051220166265
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 22,
+        "total_tokens": 24,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "label": "fresh-arithmetic"
+    }
+  ],
+  "activeContextFromEngineLog": 262144,
+  "engineContextEvidence": "initializing, n_slots = 1, n_ctx_slot = 262144",
+  "hardware": {
+    "gpu": "NVIDIA GeForce RTX 5090",
+    "systemRAMGiB": 128,
+    "OS": "Windows",
+    "expertVRAMCacheGiB": 18,
+    "expertPinnedRAMCacheGiB": 16
+  },
+  "scope": "Short-prompt inference only. Full 262k retrieval and comprehensive numerical parity remain untested.",
+  "upstreamBackendCommit": "8ce0968539b1a6795f3413c2783dfa5646b4688a",
+  "timestampUTC": "2026-10-10T20:13:02.9023255Z"
+}
